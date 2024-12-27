@@ -1,0 +1,22 @@
+from flask import Flask, request
+import requests
+
+app = Flask(__name__)
+
+# Address of the Raspberry Pi through the reverse tunnel
+PI_URL = "http://localhost:5001"
+
+@app.route('/command', methods=['POST'])
+def receive_command():
+    command = request.json.get("command")
+    print(f"Received command from user: {command}")
+
+    # Forward the command to Raspberry Pi through the reverse tunnel
+    try:
+        response = requests.post(PI_URL, json={"command": command})
+        return {"status": "success", "pi_response": response.text}, 200
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}, 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)  # Exposed to the public for user access
