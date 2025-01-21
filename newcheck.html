@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomous Driving UI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Arial', sans-serif; background-color: #000; color: #fff; overflow: hidden; height: 100vh; }
+    .dashboard { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: #111; }
+    .live-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; pointer-events: none; }
+    .info { position: absolute; top: 10px; left: 10px; font-size: 16px; background: rgba(0, 0, 0, 0.6); padding: 10px; border-radius: 8px; text-align: left; }
+    .mode { position: absolute; bottom: 20px; left: 20px; font-size: 22px; background: rgba(0, 0, 0, 0.8); color: limegreen; font-weight: bold; padding: 8px 12px; border-radius: 8px; }
+    .mode.remote { color: orange; }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <img class="live-video" id="remoteVideo" src="" />
+    <div class="overlay">
+      <div class="info">
+        <span>Temperature: 25°C</span>
+        <span>Time: 11:25</span>
+        <span>Date: Dec 17</span>
+        <span>Uptime: 5:24</span>
+      </div>
+      <div class="mode" id="mode">AUTONOMOUS DRIVING</div>
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://4.240.96.209:8765'); // Connect to WebSocket server
+
+    ws.onopen = () => {
+      console.log("Connected to Raspberry Pi video stream");
+    };
+
+    ws.onmessage = (event) => {
+      // Process incoming video data
+      const message = event.data;
+
+      if (message.includes("|")) {
+        const [timestamp, frameData] = message.split("|");
+        const imgElement = document.getElementById("remoteVideo");
+        imgElement.src = `data:image/jpeg;base64,${frameData}`;
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("Disconnected from Raspberry Pi video stream");
+    };
+
+    // Function to send control commands to Raspberry Pi
+    function sendControlCommand(command) {
+      const message = `${command}|${new Date().getTime()}`;
+      ws.send(message);
+    }
+
+    // Example command for controlling the Pi via the user interface
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowUp') {
+        sendControlCommand('UP');
+      } else if (event.key === 'ArrowDown') {
+        sendControlCommand('DOWN');
+      } else if (event.key === 'ArrowLeft') {
+        sendControlCommand('LEFT');
+      } else if (event.key === 'ArrowRight') {
+        sendControlCommand('RIGHT');
+      }
+    });
+  </script>
+</body>
+</html>

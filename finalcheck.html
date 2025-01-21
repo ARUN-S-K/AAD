@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RC Car Control</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background-color: #000; color: #fff; overflow: hidden; height: 100vh; }
+    .dashboard { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: #111; }
+    .live-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; pointer-events: none; }
+    .info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        font-size: 16px;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 10px;
+        border-radius: 8px;
+        text-align: left;
+      }
+
+      .info span {
+        display: block;
+      }
+    .mode { position: absolute; bottom: 20px; left: 20px; font-size: 22px; background: rgba(0, 0, 0, 0.8); color: orange 	; font-weight: bold; padding: 8px 12px; border-radius: 8px; }
+    .mode.remote { color: orange; }
+.warning {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 40px;
+    font-weight: bold;
+    color: red;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 20px 40px;
+    border-radius: 12px;
+    z-index: 15;
+    text-align: center;
+    pointer-events: none;
+}
+.hidden {
+    display: none;
+}
+
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <img class="live-video" id="remoteVideo" src="" />
+    <div class="overlay">
+      <div class="info">
+        <span>Temperature: 25°C</span><br>
+        <span>Time: 11:25</span><br>
+        <span>Date: Dec 17</span><br>
+        <span>Uptime: 5:24</span>
+      </div>
+      <div class="mode" id="mode">REMOTE CONTROL</div>
+      <div id="assistance-warning" class="warning hidden">
+    REQUEST FOR ASSISTANCE
+</div>
+
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://4.240.96.209:8765'); // Replace <CLOUD_SERVER_IP> with your cloud server IP or hostname
+
+    // Initial mode
+    let currentMode = "REMOTE";
+
+    ws.onopen = () => {
+      console.log("Connected to Cloud Server");
+    };
+
+// Function to display a message in the warning div
+function updateModeDisplay(mode) {
+    const modeDiv = document.getElementById('mode');
+    modeDiv.textContent = mode;  // Change the text to show the current mode
+
+    // Change the text color based on the mode
+    if (mode === "AUTONOMOUS MODE") {
+        modeDiv.style.color = "limegreen";  // Color for Autonomous mode
+    } else if (mode === "REMOTE CONTROL") {
+        modeDiv.style.color = "orange";  // Color for Remote mode
+    }
+}
+
+
+function showWarning(message) {
+    const warningDiv = document.getElementById('assistance-warning');
+    warningDiv.textContent = message;
+    warningDiv.classList.remove('hidden');  // Show the div
+}
+
+// Function to hide the warning div
+function hideWarning() {
+    const warningDiv = document.getElementById('assistance-warning');
+    warningDiv.classList.add('hidden');  // Hide the div
+}
+
+    ws.onmessage = (event) => {
+      const message = event.data;
+      console.log("Message from server:", message);
+
+      // Handle video data
+      if (message.includes("|")) {
+          const [timestamp, frameData] = message.split("|");
+          const imgElement = document.getElementById("remoteVideo");
+
+          // Update the image source with the received frame (Base64 encoding)
+          imgElement.src = `data:image/jpeg;base64,${frameData}`;
+      }
+
+      // Handle mode updates
+      else if (message === "REMOTE") {
+        currentMode = "REMOTE";
+        document.getElementById("mode").textContent = "REMOTE CONTROL";
+        document.getElementById("mode").classList.remove("autonomous");
+        document.getElementById("mode").classList.add("remote");
+      } else if (message === "AUTONOMOUS") {
+        currentMode = "AUTONOMOUS";
+        document.getElementById("mode").textContent = "AUTONOMOUS MODE";
+        document.getElementById("mode").classList.remove("remote");
+        document.getElementById("mode").classList.add("autonomous");
+      } else if (message === "REQUEST_AUTONOMOUS") {
+        showWarning("ready for Autonomous Mode");
+    setTimeout(() => {
+        hideWarning();  // Hide after 2 seconds
+    }, 2000);
+      } else if (message === "REQUEST_REMOTE") {
+        showWarning("request for Assistance");
+    setTimeout(() => {
+        hideWarning();  // Hide after 2 seconds
+    }, 2000);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("Disconnected from Cloud Server");
+    };
+
+    // Function to send control commands
+    function sendControlCommand(command) {
+      if (currentMode === "REMOTE" || command === "ACTIVATE_REMOTE" || command === "ACTIVATE_AUTONOMOUS") {
+        ws.send(command);
+      } else {
+        console.log("Command ignored. Autonomous mode is active.");
+      }
+    }
+
+function checkInactivity() {
+    const currentTime = Date.now();
+    if (currentTime - lastInteractionTime > 0.1) { // Check inactivity, adjust as needed
+      sendControlCommand('STOP'); // Send STOP command immediately
+    }
+  }
+
+
+  // Event listener for keydown events
+  window.addEventListener('keydown', (event) => {
+    lastInteractionTime = Date.now(); // Update the last interaction time
+
+    // Check combinations for UP + LEFT and UP + RIGHT
+    if (event.key === 'ArrowUp') {
+        if (event.getModifierState('ArrowLeft')) {
+            sendControlCommand('UP_LEFT');
+        } else if (event.getModifierState('ArrowRight')) {
+            sendControlCommand('UP_RIGHT');
+        } else {
+            sendControlCommand('UP');
+        }
+    } 
+    // Check combinations for DOWN + LEFT and DOWN + RIGHT
+    else if (event.key === 'ArrowDown') {
+        if (event.getModifierState('ArrowLeft')) {
+            sendControlCommand('DOWN_LEFT');
+        } else if (event.getModifierState('ArrowRight')) {
+            sendControlCommand('DOWN_RIGHT');
+        } else {
+            sendControlCommand('DOWN');
+        }
+    } 
+    // Handle standalone LEFT and RIGHT
+    else if (event.key === 'ArrowLeft') {
+        sendControlCommand('LEFT');
+    } else if (event.key === 'ArrowRight') {
+        sendControlCommand('RIGHT');
+    } 
+    // Handle activation commands
+    else if (event.key === 'A') {
+        sendControlCommand("ACTIVATE_AUTONOMOUS");
+        updateModeDisplay("AUTONOMOUS MODE");
+    } else if (event.key === 'R') {
+        sendControlCommand("ACTIVATE_REMOTE");
+	updateModeDisplay("REMOTE CONTROL");
+        
+    }
+});
+
+  // Continuously check for inactivity in a loop
+  setInterval(checkInactivity, 50);
+  </script>
+</body>
+</html>

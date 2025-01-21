@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autonomous Driving UI</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Arial', sans-serif;
+        background-color: #000;
+        color: #fff;
+        overflow: hidden;
+        height: 100vh;
+      }
+
+      .dashboard {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #111;
+      }
+
+      .live-video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        font-size: 16px;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 10px;
+        border-radius: 8px;
+        text-align: left;
+      }
+
+      .info span {
+        display: block;
+      }
+
+      .mode {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        font-size: 22px;
+        background: rgba(0, 0, 0, 0.8);
+        color: limegreen;
+        font-weight: bold;
+        padding: 8px 12px;
+        border-radius: 8px;
+      }
+
+      .mode.remote {
+        color: orange;
+      }
+
+      .status-container {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 15px;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .bandwidth {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: lightblue;
+      }
+
+      .bandwidth.good {
+        color: #00e600;
+      }
+
+      .bandwidth.moderate {
+        color: yellow;
+      }
+
+      .bandwidth.bad {
+        color: red;
+      }
+
+      .bandwidth-title {
+        color: lightblue;
+        margin-bottom: 5px;
+      }
+
+      .speedometer {
+        font-size: 18px;
+        font-weight: bold;
+        color: white;
+      }
+
+      .speed-title {
+        color: lightblue;
+        margin-bottom: 5px;
+      }
+
+      .steering {
+        position: absolute;
+        bottom: 20px;
+        left: calc(50% - 40px);
+        width: 80px;
+        height: 80px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      .warning {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 40px;
+        font-weight: bold;
+        color: red;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px 40px;
+        border-radius: 12px;
+        z-index: 15;
+        text-align: center;
+        pointer-events: none;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 768px) {
+        .info,
+        .mode,
+        .status-container {
+          font-size: 14px;
+        }
+
+        .mini-map {
+          width: 100px;
+          height: 70px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dashboard">
+      <!-- Live Video Feed -->
+      <img class="live-video" id="remoteVideo" src="" /> <!-- Empty src initially -->
+
+      <!-- Overlay Elements -->
+      <div class="overlay">
+        <div class="info">
+          <span>Temperature: 25Â°C</span>
+          <span>Time: 11:25</span>
+          <span>Date: Dec 17</span>
+          <span>Uptime: 5:24</span>
+        </div>
+
+        <div class="mode" id="mode">AUTONOMOUS DRIVING</div>
+
+        <div class="status-container">
+          <div class="bandwidth-title">Network</div>
+          <div class="bandwidth good">Good</div>
+          <div class="speed-title">Speed</div>
+          <div class="speedometer">4 km/h</div>
+        </div>
+
+        <div class="steering">D</div>
+
+        <!-- Request for Assistance Warning -->
+        <div id="assistance-warning" class="warning hidden">
+          REQUEST FOR ASSISTANCE
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // WebSocket to receive video data from Raspberry Pi
+      const ws = new WebSocket('ws://4.240.96.209:8765'); // Connect to the WebSocket server
+
+      ws.onopen = () => {
+        console.log("Connected to the Raspberry Pi video stream");
+      };
+
+      ws.onmessage = (event) => {
+        // Handle the received video frame (base64 encoded)
+        const message = event.data;
+
+        if (message.includes("|")) {
+          const [timestamp, frameData] = message.split("|");
+          const imgElement = document.getElementById("remoteVideo");
+
+          // Update the image source with the received frame (Base64 encoding)
+          imgElement.src = `data:image/jpeg;base64,${frameData}`;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        console.log("Disconnected from the Raspberry Pi video stream");
+      };
+
+      function toggleAssistanceWarning(visible) {
+        const warningElement = document.getElementById("assistance-warning");
+        if (visible) {
+          warningElement.classList.remove("hidden");
+        } else {
+          warningElement.classList.add("hidden");
+        }
+      }
+
+      setInterval(() => {
+        const time = new Date();
+        document.querySelector(".info span:nth-child(2)").textContent = `Time: ${time.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`;
+        document.querySelector(".info span:nth-child(3)").textContent = `Date: ${time.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}`;
+
+        // Randomize speed
+        document.querySelector(".speedometer").textContent = `${Math.floor(Math.random() * 50)} km/h`;
+
+        // Randomize bandwidth status
+        const bandwidthStates = ["good", "moderate", "bad"];
+        const bandwidthText = {
+          good: "Good",
+          moderate: "Moderate",
+          bad: "Bad",
+        };
+        const randomBandwidth = bandwidthStates[Math.floor(Math.random() * bandwidthStates.length)];
+        const bandwidthElement = document.querySelector(".bandwidth");
+        bandwidthElement.className = `bandwidth ${randomBandwidth}`;
+        bandwidthElement.textContent = `${bandwidthText[randomBandwidth]}`;
+
+        // Toggle mode between Autonomous and Remote Driving
+        const mode = Math.random() > 0.5 ? "AUTONOMOUS DRIVING" : "REMOTE DRIVING";
+        const modeElement = document.getElementById("mode");
+        modeElement.textContent = mode;
+        modeElement.classList.toggle("remote", mode === "REMOTE DRIVING");
+
+        // Show or hide the assistance warning in autonomous mode
+        const isAutonomousMode = mode === "AUTONOMOUS DRIVING";
+        const showWarning = isAutonomousMode && Math.random() > 0.7; // 30% chance
+        toggleAssistanceWarning(showWarning);
+      }, 2000);
+    </script>
+  </body>
+</html>
